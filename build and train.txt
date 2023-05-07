@@ -44,7 +44,7 @@ OBSERVATIONS:
 
 transformer layers: 15 to 26
 
-supervised: runid 3 w/ 60% WER
+supervised w/o specaug: runid 3 w/ 60% WER
 
 TESTING AND DECODING:
 
