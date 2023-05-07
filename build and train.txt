@@ -1,0 +1,98 @@
+WAV2LETTER BUILD AND INSTALLATION GUIDE:
+
+ -Install UBUNTU 18.04 para mas mapadali buhay
+ -Follow flashlight v0.2's Dockerfile-CUDA-base to install dependecies
+	> install all apt dependencies first bago yung sa mga github repos,
+	> install CUDA 10.2 AND CUDNN 7.6.5. also, cuda-toolkit-10-2 ang iinstall through apt and not just cuda [FOR WSL]
+	> Get Boost 1.70.0 for arrayfire 3.7.3 [use cmake below for building], then use apt libboost-all-dev for kenlm
+		> after dl run ./bootstrap.sh --prefix=$HOME/boost
+		> run ./b2 install
+ -Follow WAV2LETTER v0.2's Dockerfile-CUDA-base and Dockerfile-CUDA to build and install w2l
+
+arrayfire:
+
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+                               -DAF_BUILD_CUDA=ON \
+                               -DAF_BUILD_CPU=OFF \
+                               -DAF_BUILD_OPENCL=OFF \
+                               -DAF_BUILD_EXAMPLES=OFF \
+                               -DAF_WITH_IMAGEIO=OFF \
+                               -DBUILD_TESTING=OFF \
+                               -DAF_BUILD_DOCS=OFF \
+			       -DBOOST_INCLUDEDIR=/home/remo/boost/include
+
+Divided dev-clean into training (1600 files) and validation (1103 files) set.
+
+TRAINING:
+
+wav2letter/build/Train train --flagsfile=[train.cfg filepath] --minloglevel=0 --logtostderr=1
+
+OBSERVATIONS:
+
+	[USING SEMI-SUPERVISED TRAINING CONFIGURATION]
+	> Training data used was dev-clean, split into two for training and validation. Final training data is 3.36 hrs
+	> Sobrang onti nung 3.36 hrs na di kaya maglearn nung transformer using the semi-supervised training parameters
+	>   No change in WER sa training (100%) pero yung loss is nababawasan [fast decrease pag greater than 32 yung loss, pag less than na nagkakadecrease nalang pag nag ddecay yung learning rate]
+	> Pag sobrang baba na ng learning rate di na nagddecrease yung loss
+
+	[USING SUPERVISED TRAINING CONFIGURATION]
+	> Same data was used with semi-sup config
+	> Decreasing WER na, 110 epochs done and yung WER nagdecrease hanggang 54%
+	> warm-up was used. Dito nag sstart yung learning rate from 0 to 0.4 for n number of updates (nakalagay sa train.cfg)
+	> with specaugment na rin starting from update 32000. Upon starting specaugment, nag increase WER to 80+%. Pero nung without specaugment umabot na ng 64% WER
+
+
+transformer layers: 15 to 26
+
+supervised: runid 3 w/ 60% WER
+
+TESTING AND DECODING:
+
+[supervised w/ specaug]wav2letter/build/Test \
+    --am=/home/remo/transformer_repro/supervised/005_model_last.bin \
+    --tokensdir=/mnt/d/198/model/am \
+    --tokens=librispeech-train-all-unigram-10000.tokens \
+    --lexicon=/mnt/d/198/model/am/librispeech-train+dev-unigram-10000-nbest10.lexicon \
+    --uselexicon=true \
+    --datadir=/mnt/d/198/data/lists \
+    --test=test-other.lst \
+    --minloglevel=0 --logtostderr=1 \
+    --maxtsz=1000000000 --maxisz=1000000000 --minisz=0 --mintsz=0 \
+    --emission_dir=''
+
+	>TEST-OTHER results: WER 85.75% | LER 72.38%
+	>TEST-CLEAN results: WER 79.84% | LER 66.06%
+
+[semisup config] wav2letter/build/Test \
+    --am=/home/remo/transformer_repro/lr_4_decay_15_steps_5_warmup/003_model_last.bin \
+    --tokensdir=/mnt/d/198/model/am \
+    --tokens=librispeech-train-all-unigram-10000.tokens \
+    --lexicon=/mnt/d/198/model/am/librispeech-train+dev-unigram-10000-nbest10.lexicon \
+    --uselexicon=true \
+    --datadir=/mnt/d/198/data/lists \
+    --test=test-other.lst \
+    --minloglevel=0 --logtostderr=1 \
+    --maxtsz=1000000000 --maxisz=1000000000 --minisz=0 --mintsz=0 \
+    --emission_dir=''
+
+	>TEST-OTHER results: WER 100% | LER 100%
+	>TEST-CLEAN results: WER 100% | LER 100%
+
+[supervised w/o specaug (epoch 39)] wav2letter/build/Test \
+    --am=/home/remo/transformer_repro/supervised/003/003_model_last.bin \
+    --tokensdir=/mnt/d/198/model/am \
+    --tokens=librispeech-train-all-unigram-10000.tokens \
+    --lexicon=/mnt/d/198/model/am/librispeech-train+dev-unigram-10000-nbest10.lexicon \
+    --uselexicon=true \
+    --datadir=/mnt/d/198/data/lists \
+    --test=test-clean.lst \
+    --minloglevel=0 --logtostderr=1 \
+    --maxtsz=1000000000 --maxisz=1000000000 --minisz=0 --mintsz=0 \
+    --emission_dir=''
+
+	>TEST-OTHER results: WER 87.27% | LER 70.94%
+	>TEST-CLEAN results: WER 81.57% | LER 63.69%
+
+wav2letter/build/Decoder --flagsfile=/mnt/d/198/decoder.cfg --minloglevel=0 --logtostderr=1 --maxtsz=1000000000 --maxisz=1000000000 --minisz=0 --mintsz=0 --emission_dir=''
+
+	>RESULTS: DI GUMANA AMP

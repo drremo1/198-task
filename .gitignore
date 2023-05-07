@@ -1,0 +1,8 @@
+# acoustic models
+
+*.bin
+*.tar.gz
+*.arpa*
+
+data
+model
